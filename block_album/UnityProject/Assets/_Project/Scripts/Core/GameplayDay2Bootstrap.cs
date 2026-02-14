@@ -46,9 +46,24 @@ namespace BlockAlbum.Core
                 safeArea.AddComponent<MatchFlowController>();
             }
 
+            if (safeArea != null && safeArea.GetComponent<LevelShapePoolIntroHud>() == null)
+            {
+                safeArea.AddComponent<LevelShapePoolIntroHud>();
+            }
+
+            if (safeArea != null && safeArea.GetComponent<AutoHintController>() == null)
+            {
+                safeArea.AddComponent<AutoHintController>();
+            }
+
             if (topBar != null && topBar.GetComponent<LevelGoalController>() == null)
             {
                 topBar.AddComponent<LevelGoalController>();
+            }
+
+            if (topBar != null && topBar.GetComponent<LevelProgressionController>() == null)
+            {
+                topBar.AddComponent<LevelProgressionController>();
             }
         }
     }

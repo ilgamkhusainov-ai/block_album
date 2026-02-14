@@ -23,6 +23,9 @@
 - `Scripts/Goals` - цели уровня (по очкам), статус выполнения.
 - `Scripts/UI` - HUD, экраны конца матча, подсказки, визуализация разбивки очков по ходу.
 - `Scripts/UI/TurnScoreFeedHud.cs` - лента последних начислений с расшифровкой источников очков.
+- `Scripts/UI/LevelShapePoolIntroHud.cs` - 5-секундный pre-level pop-up с пулом фигур и подсветкой новой/усиленной фигуры.
+- `Scripts/UI/AutoHintController.cs` - автоподсказка после паузы (ghost лучшего валидного хода), отключается при overlay.
+- `Scripts/Goals/LevelProgressionController.cs` - progression по уровням (конфиг/генерация целей, переход на следующий уровень, tier-сложность по вариативности фигур).
 - `Scripts/Meta` - daily login, задания, награды.
 - `Scripts/Ads` - rewarded ads абстракция.
 - `Scripts/Config` - ScriptableObject-конфиги.

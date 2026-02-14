@@ -21,6 +21,7 @@ namespace BlockAlbum.Core
         private BoardView _boardView;
         private PieceTrayView _pieceTrayView;
         private LevelGoalController _goalController;
+        private LevelProgressionController _levelProgressionController;
         private BoosterController _boosterController;
 
         private RectTransform _overlayRect;
@@ -28,6 +29,7 @@ namespace BlockAlbum.Core
         private Text _detailsText;
         private Button _restartButton;
         private Button _secondChanceButton;
+        private Text _restartButtonLabel;
 
         private bool _runEnded;
         private bool _secondChanceUsed;
@@ -92,6 +94,11 @@ namespace BlockAlbum.Core
                     _goalController.GoalChanged -= OnGoalChanged;
                     _goalController.GoalChanged += OnGoalChanged;
                 }
+            }
+
+            if (_levelProgressionController == null)
+            {
+                _levelProgressionController = FindFirstObjectByType<LevelProgressionController>();
             }
 
             if (_boosterController == null)
@@ -195,13 +202,20 @@ namespace BlockAlbum.Core
             if (_detailsText != null)
             {
                 var goalText = _goalController != null ? _goalController.GetStatusLabel() : "Goal: n/a";
-                _detailsText.text = $"Score: {score}\n{goalText}\nReason: {_finishReason}";
+                var levelText = _levelProgressionController != null ? _levelProgressionController.GetLevelLabel() : "Level: n/a";
+                var varietyText = _levelProgressionController != null ? _levelProgressionController.GetVarietyLabel() : "Variety: n/a";
+                _detailsText.text = $"{levelText} | {varietyText}\nScore: {score}\n{goalText}\nReason: {_finishReason}";
             }
 
             if (_secondChanceButton != null)
             {
                 var canUseSecondChance = secondChanceEnabled && !_endedWithWin && !_secondChanceUsed;
                 _secondChanceButton.gameObject.SetActive(canUseSecondChance);
+            }
+
+            if (_restartButtonLabel != null)
+            {
+                _restartButtonLabel.text = _endedWithWin ? "NEXT LEVEL" : "PLAY AGAIN";
             }
         }
 
@@ -268,11 +282,17 @@ namespace BlockAlbum.Core
 
         private void RestartRun()
         {
+            var previousRunWasWin = _endedWithWin;
             _suppressEvaluation = true;
             _runEnded = false;
             _endedWithWin = false;
             _finishReason = string.Empty;
             _secondChanceUsed = false;
+
+            if (_levelProgressionController != null)
+            {
+                _levelProgressionController.PrepareGoalForNewRun(previousRunWasWin);
+            }
 
             if (_boardView != null)
             {
@@ -367,6 +387,7 @@ namespace BlockAlbum.Core
 
             _restartButton = EnsureButton(buttonsRoot, "RestartButton", "PLAY AGAIN", restartButtonColor, OnRestartPressed);
             _secondChanceButton = EnsureButton(buttonsRoot, "SecondChanceButton", "SECOND CHANCE", secondaryButtonColor, OnSecondChancePressed);
+            _restartButtonLabel = GetButtonLabel(_restartButton);
         }
 
         private static Text EnsureText(RectTransform parent, string name, int fontSize, FontStyle style, TextAnchor anchor, Color color)
@@ -440,6 +461,22 @@ namespace BlockAlbum.Core
             text.text = label;
 
             return button;
+        }
+
+        private static Text GetButtonLabel(Button button)
+        {
+            if (button == null)
+            {
+                return null;
+            }
+
+            var labelNode = button.transform.Find("Label");
+            if (labelNode == null)
+            {
+                return null;
+            }
+
+            return labelNode.GetComponent<Text>();
         }
 
         private static Font GetDefaultFont()

@@ -50,6 +50,9 @@
 - [x] Added HUD hint for turns until next blocker move.
 - [x] Blockers now move only to adjacent cells (including diagonals).
 - [x] Blockers can spawn/move onto occupied figure cells.
+- [x] Movement rule update: if blocker is on empty cell and currently allowed to step on figure, it moves toward occupied-cell mass center; if blocker is already on figure (or cannot step on figure now), movement stays in previous mode.
+- [x] Additional movement priority: before mass-center targeting, blocker seeks nearest occupied cell within at most 2 moves.
+- [x] Tie-break for nearest occupied targets: if distances are equal, choose the target closer to occupied-cell mass center.
 - [x] Blockers are destroyed by clear; blocker-on-figure leaves the figure cell after blocker removal.
 - [x] Added per-blocker respawn cooldown: can reappear only after 10 turns.
 - [x] Added separate visual style for blocker-on-empty vs blocker-on-figure.
@@ -80,6 +83,29 @@
 - [x] Added fallback second-chance board opening when tray reroll still gives no valid moves.
 - [x] Added per-turn score breakdown visualization (TopBar breakdown + in-game turn feed).
 
-## Next (Day 10)
-- Add configurable level list (up to 40 levels) with target score per level.
-- Add simple progression manager (complete level -> next level, fail -> retry).
+## Day 10 status
+- [x] Added configurable level progression controller (`LevelProgressionController`).
+- [x] Added fallback generated level plan up to 40 levels.
+- [x] Fixed target score is set to `1000` (no per-level score scaling).
+- [x] Difficulty axis moved to figure variety tiers (`T1..T13`) with pool swap on level change (`25+` -> full pool).
+- [x] Variety grows every 2 levels up to level 24; level 25+ uses full pool.
+- [x] Fallback score-step is fixed to `0` (no automatic per-level score escalation).
+- [x] Added run integration: `NEXT LEVEL` after `WIN` advances level, `PLAY AGAIN` after `FAIL` restarts same level.
+- [x] Added level + variety labels in HUD and end-run panel.
+- [x] Added reserved shape catalog for level `41+` rollout (kept disabled in active generation pools).
+- [x] Added 5-second pre-level popup with current shape pool and highlighted newly added/boosted shape.
+- [x] Pre-level popup rule: on level 1 all shown shapes are marked as `NEW`.
+
+## Day 11 status
+- [x] Added auto-hint controller: after idle delay it shows ghost of the best available placement.
+- [x] Auto-hint is disabled until player completes the first turn.
+- [x] Hint selection scans all tray pieces and all valid placements.
+- [x] Hint priority: line clear first, then minimum leftovers from placed piece, then max expected score/combo.
+- [x] If no line clear is possible, hint prefers placements that most improve line/zone completion progress.
+- [x] Hint tie-breaker added: prefer placements closer to the center of current placed-cell mass.
+- [x] Hint visualization updated: blinking ghost for 2 seconds, then hidden; next hint appears after 10 seconds of continued idle.
+- [x] Hint is suppressed while pre-level or run-end overlays are active.
+- [x] Hint clears immediately on player input, tray change, turn resolve, or runtime state change.
+
+## Next (Day 11)
+- Add clearer in-board feedback for high-value placements.

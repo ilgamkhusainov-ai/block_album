@@ -6,11 +6,14 @@ namespace BlockAlbum.Pieces
 {
     public static class PieceShapeLibrary
     {
+        private const int FullPoolTier = 13;
         private static readonly IReadOnlyList<PieceShapeDefinition> Shapes = BuildShapes();
+        private static readonly IReadOnlyList<PieceShapeDefinition> FutureShapes41Plus = BuildFutureShapes41Plus();
+        private static readonly IReadOnlyList<IReadOnlyList<PieceShapeDefinition>> TierPools = BuildTierPools();
 
         private static IReadOnlyList<PieceShapeDefinition> BuildShapes()
         {
-            var baseShapes = new List<PieceShapeDefinition>
+            var currentBaseShapes = new List<PieceShapeDefinition>
             {
                 new PieceShapeDefinition("dot", new Vector2Int(0, 0)),
                 new PieceShapeDefinition("line2", new Vector2Int(0, 0), new Vector2Int(1, 0)),
@@ -22,6 +25,28 @@ namespace BlockAlbum.Pieces
                 new PieceShapeDefinition("z4", new Vector2Int(0, 0), new Vector2Int(1, 0), new Vector2Int(1, 1), new Vector2Int(2, 1)),
             };
 
+            return BuildVariants(currentBaseShapes);
+        }
+
+        private static IReadOnlyList<PieceShapeDefinition> BuildFutureShapes41Plus()
+        {
+            var futureBaseShapes = new List<PieceShapeDefinition>
+            {
+                // Reserved for level 41+ rollout. Not used in active pools yet.
+                new PieceShapeDefinition("u5", new Vector2Int(0, 0), new Vector2Int(0, 1), new Vector2Int(1, 1), new Vector2Int(2, 1), new Vector2Int(2, 0)),
+                new PieceShapeDefinition("plus5", new Vector2Int(1, 0), new Vector2Int(0, 1), new Vector2Int(1, 1), new Vector2Int(2, 1), new Vector2Int(1, 2)),
+                new PieceShapeDefinition("w5", new Vector2Int(0, 0), new Vector2Int(1, 0), new Vector2Int(1, 1), new Vector2Int(2, 1), new Vector2Int(2, 2)),
+                new PieceShapeDefinition("v5", new Vector2Int(0, 0), new Vector2Int(0, 1), new Vector2Int(0, 2), new Vector2Int(1, 0), new Vector2Int(2, 0)),
+                new PieceShapeDefinition("p5", new Vector2Int(0, 0), new Vector2Int(1, 0), new Vector2Int(0, 1), new Vector2Int(1, 1), new Vector2Int(0, 2)),
+                new PieceShapeDefinition("i4", new Vector2Int(0, 0), new Vector2Int(1, 0), new Vector2Int(2, 0), new Vector2Int(3, 0)),
+                new PieceShapeDefinition("i5", new Vector2Int(0, 0), new Vector2Int(1, 0), new Vector2Int(2, 0), new Vector2Int(3, 0), new Vector2Int(4, 0)),
+            };
+
+            return BuildVariants(futureBaseShapes);
+        }
+
+        private static IReadOnlyList<PieceShapeDefinition> BuildVariants(IReadOnlyList<PieceShapeDefinition> baseShapes)
+        {
             var uniqueBySignature = new HashSet<string>();
             var expanded = new List<PieceShapeDefinition>(48);
             var variantIndex = 0;
@@ -134,6 +159,112 @@ namespace BlockAlbum.Pieces
         public static IReadOnlyList<PieceShapeDefinition> GetDefaults()
         {
             return Shapes;
+        }
+
+        public static IReadOnlyList<PieceShapeDefinition> GetReservedForLevel41Plus()
+        {
+            return FutureShapes41Plus;
+        }
+
+        public static IReadOnlyList<PieceShapeDefinition> GetPoolForVarietyTier(int tier)
+        {
+            if (tier >= FullPoolTier)
+            {
+                return Shapes;
+            }
+
+            var safeTier = Mathf.Clamp(tier, 1, FullPoolTier - 1);
+            return TierPools[safeTier - 1];
+        }
+
+        private static IReadOnlyList<IReadOnlyList<PieceShapeDefinition>> BuildTierPools()
+        {
+            var pools = new List<IReadOnlyList<PieceShapeDefinition>>(FullPoolTier);
+            for (var tier = 1; tier < FullPoolTier; tier++)
+            {
+                pools.Add(BuildTierPool(tier));
+            }
+
+            pools.Add(Shapes);
+            return pools;
+        }
+
+        private static IReadOnlyList<PieceShapeDefinition> BuildTierPool(int tier)
+        {
+            var pool = new List<PieceShapeDefinition>(Shapes.Count * 4);
+            for (var i = 0; i < Shapes.Count; i++)
+            {
+                var shape = Shapes[i];
+                var baseId = ExtractBaseId(shape.Id);
+                var weight = GetWeight(baseId, tier);
+                for (var rep = 0; rep < weight; rep++)
+                {
+                    pool.Add(shape);
+                }
+            }
+
+            if (pool.Count == 0)
+            {
+                return Shapes;
+            }
+
+            return pool;
+        }
+
+        private static int GetWeight(string baseId, int tier)
+        {
+            var t = Mathf.Clamp01((tier - 1f) / (FullPoolTier - 2f)); // 1..12 -> 0..1
+            switch (baseId)
+            {
+                case "dot":
+                    if (tier > 5) return 0;
+                    return Mathf.Max(1, Mathf.RoundToInt(Mathf.Lerp(10f, 1f, t)));
+                case "line2":
+                    if (tier > 8) return 0;
+                    return Mathf.Max(1, Mathf.RoundToInt(Mathf.Lerp(9f, 2f, t)));
+                case "line3":
+                    return Mathf.Max(1, Mathf.RoundToInt(Mathf.Lerp(8f, 4f, t)));
+                case "square2":
+                    return Mathf.Max(1, Mathf.RoundToInt(Mathf.Lerp(7f, 5f, t)));
+                case "l3":
+                    if (tier < 2) return 0;
+                    return Mathf.Max(1, Mathf.RoundToInt(Mathf.Lerp(2f, 7f, t)));
+                case "l4":
+                    if (tier < 3) return 0;
+                    return Mathf.Max(1, Mathf.RoundToInt(Mathf.Lerp(1f, 7f, t)));
+                case "t4":
+                    if (tier < 5) return 0;
+                    return Mathf.Max(1, Mathf.RoundToInt(Mathf.Lerp(1f, 7f, t)));
+                case "z4":
+                    if (tier < 7) return 0;
+                    return Mathf.Max(1, Mathf.RoundToInt(Mathf.Lerp(1f, 6f, t)));
+                default:
+                    return 0;
+            }
+        }
+
+        private static string ExtractBaseId(string id)
+        {
+            if (string.IsNullOrEmpty(id))
+            {
+                return string.Empty;
+            }
+
+            var split = id.LastIndexOf('_');
+            if (split <= 0 || split >= id.Length - 1)
+            {
+                return id;
+            }
+
+            for (var i = split + 1; i < id.Length; i++)
+            {
+                if (id[i] < '0' || id[i] > '9')
+                {
+                    return id;
+                }
+            }
+
+            return id.Substring(0, split);
         }
     }
 }

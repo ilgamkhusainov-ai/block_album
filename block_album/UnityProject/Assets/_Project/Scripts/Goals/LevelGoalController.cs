@@ -9,7 +9,6 @@ namespace BlockAlbum.Goals
     public sealed class LevelGoalController : MonoBehaviour
     {
         [SerializeField] private int targetScore = 1200;
-        [SerializeField] private int turnLimit = 40;
 
         private BoardView _boardView;
         private bool _isCompleted;
@@ -18,7 +17,6 @@ namespace BlockAlbum.Goals
         private bool _baseCaptured;
 
         public int TargetScore => targetScore;
-        public int TurnLimit => turnLimit;
         public int TurnsRemaining => -1;
         public bool IsCompleted => _isCompleted;
         public bool IsFailed => false;
@@ -72,6 +70,18 @@ namespace BlockAlbum.Goals
             }
 
             return $"Goal: {CurrentScore}/{targetScore}";
+        }
+
+        public void SetTargetScore(int value, bool updateBase = true)
+        {
+            targetScore = Mathf.Max(1, value);
+            if (updateBase)
+            {
+                _baseTargetScore = targetScore;
+                _baseCaptured = true;
+            }
+
+            GoalChanged?.Invoke();
         }
 
         public bool GrantExtraTurns(int extraTurns)

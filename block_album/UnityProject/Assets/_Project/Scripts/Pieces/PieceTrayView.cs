@@ -2,6 +2,7 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using BlockAlbum.Grid;
+using BlockAlbum.Goals;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -28,6 +29,7 @@ namespace BlockAlbum.Pieces
         private readonly List<SlotVisual> _slots = new List<SlotVisual>(3);
         private IReadOnlyList<PieceShapeDefinition> _shapes;
         private BoardView _boardView;
+        private LevelProgressionController _levelProgressionController;
         private bool _initialized;
         public event Action TrayChanged;
 
@@ -41,6 +43,16 @@ namespace BlockAlbum.Pieces
         {
             yield return WaitForCanvasReady();
             InitializeIfNeeded();
+            BindLevelProgression();
+            ApplyShapesForCurrentLevel(refillTray: true);
+        }
+
+        private void OnDestroy()
+        {
+            if (_levelProgressionController != null)
+            {
+                _levelProgressionController.LevelChanged -= OnLevelChanged;
+            }
         }
 
         [ContextMenu("Tray/Refill")]
@@ -94,6 +106,20 @@ namespace BlockAlbum.Pieces
             return false;
         }
 
+        public void SetShapePool(IReadOnlyList<PieceShapeDefinition> shapes, bool refillTray)
+        {
+            if (shapes == null || shapes.Count == 0)
+            {
+                return;
+            }
+
+            _shapes = shapes;
+            if (refillTray)
+            {
+                RefillTray();
+            }
+        }
+
         public void OnSlotConsumed(PieceTraySlot slot)
         {
             AssignRandomShape(slot);
@@ -132,6 +158,27 @@ namespace BlockAlbum.Pieces
             return false;
         }
 
+        public int GetCurrentShapes(List<PieceShapeDefinition> buffer)
+        {
+            InitializeIfNeeded();
+            if (buffer == null)
+            {
+                return 0;
+            }
+
+            buffer.Clear();
+            for (var i = 0; i < _slots.Count; i++)
+            {
+                var shape = _slots[i].Slot != null ? _slots[i].Slot.CurrentShape : null;
+                if (shape != null)
+                {
+                    buffer.Add(shape);
+                }
+            }
+
+            return buffer.Count;
+        }
+
         private void InitializeIfNeeded()
         {
             if (_initialized)
@@ -147,6 +194,34 @@ namespace BlockAlbum.Pieces
             BuildSlots();
             RefillTrayInternal();
             _initialized = true;
+        }
+
+        private void BindLevelProgression()
+        {
+            _levelProgressionController = FindFirstObjectByType<LevelProgressionController>();
+            if (_levelProgressionController == null)
+            {
+                return;
+            }
+
+            _levelProgressionController.LevelChanged -= OnLevelChanged;
+            _levelProgressionController.LevelChanged += OnLevelChanged;
+        }
+
+        private void OnLevelChanged()
+        {
+            ApplyShapesForCurrentLevel(refillTray: true);
+        }
+
+        private void ApplyShapesForCurrentLevel(bool refillTray)
+        {
+            if (_levelProgressionController == null)
+            {
+                return;
+            }
+
+            var tier = _levelProgressionController.CurrentVarietyTier;
+            SetShapePool(PieceShapeLibrary.GetPoolForVarietyTier(tier), refillTray);
         }
 
         private static IEnumerator WaitForCanvasReady()

@@ -21,12 +21,12 @@ namespace BlockAlbum.Grid
         [SerializeField] private Color ghostInvalidColor = new Color(1f, 0.35f, 0.35f, 0.58f);
         [Header("Day 4: Clear + Score")]
         [SerializeField] private int zoneSize = 3;
-        [SerializeField] private int scorePerClearedCell = 1;
-        [SerializeField] private int scorePerClearedBlocker = 5;
-        [SerializeField] private int scorePerLine = 10;
-        [SerializeField] private int scorePerZone = 15;
+        [SerializeField] private int scorePerClearedCell = 10;
+        [SerializeField] private int scorePerClearedBlocker = 15;
+        [SerializeField] private int scorePerLine = 50;
+        [SerializeField] private int scorePerZone = 70;
         [Header("Day 5: Combo + Power")]
-        [SerializeField] private int comboScorePerLevel = 15;
+        [SerializeField] private int comboScorePerLevel = 40;
         [SerializeField] private int powerMax = 100;
         [SerializeField] private int powerPerComboLevel = 20;
         [SerializeField] private int streakResetOnNoClearTurn = 3;
@@ -77,6 +77,15 @@ namespace BlockAlbum.Grid
         public int PowerCharge => _powerCharge;
         public int PowerMax => powerMax;
         public int PlayerTurnCount => _playerTurnCount;
+        public int ZoneSize => Mathf.Max(1, zoneSize);
+        public int ScorePerClearedCell => scorePerClearedCell;
+        public int ScorePerClearedBlocker => scorePerClearedBlocker;
+        public int ScorePerLine => scorePerLine;
+        public int ScorePerZone => scorePerZone;
+        public int ComboScorePerLevel => comboScorePerLevel;
+        public int CurrentClearStreak => _clearStreak;
+        public int TurnsSinceLastClear => _turnsSinceLastClear;
+        public int StreakResetOnNoClearTurn => Mathf.Max(1, streakResetOnNoClearTurn);
         public int TurnsUntilBlockerMove => GetTurnsUntilBlockerMove();
         public BoardTurnResult LastTurnResult => _lastTurnResult;
         public event Action<BoardTurnResult> TurnResolved;
@@ -681,9 +690,12 @@ namespace BlockAlbum.Grid
                 }
 
                 var current = blocker.Position;
+                var wasOnFigure = _model.IsBlockedOnOccupied(current);
                 _model.ClearBlocker(current);
 
-                if (TryGetAdjacentMoveTarget(current, out var target))
+                var allowStepOnFigureNow = CanBlockerStepOntoFigureNow();
+                var seekMassCenter = !wasOnFigure && allowStepOnFigureNow;
+                if (TryGetAdjacentMoveTarget(current, seekMassCenter, out var target))
                 {
                     blocker.Position = target;
                     _model.PlaceBlocker(target);
@@ -696,7 +708,158 @@ namespace BlockAlbum.Grid
             }
         }
 
-        private bool TryGetAdjacentMoveTarget(Vector2Int origin, out Vector2Int target)
+        private bool TryGetAdjacentMoveTarget(Vector2Int origin, bool seekMassCenter, out Vector2Int target)
+        {
+            target = default;
+            if (_model == null)
+            {
+                return false;
+            }
+
+            if (seekMassCenter && TryGetAdjacentMoveTargetToNearbyOccupiedTwoSteps(origin, out target))
+            {
+                return true;
+            }
+
+            if (seekMassCenter && TryGetAdjacentMoveTargetToMassCenter(origin, out target))
+            {
+                return true;
+            }
+
+            return TryGetAdjacentMoveTargetDefault(origin, out target);
+        }
+
+        private bool TryGetAdjacentMoveTargetToNearbyOccupiedTwoSteps(Vector2Int origin, out Vector2Int target)
+        {
+            target = default;
+            if (_model == null)
+            {
+                return false;
+            }
+
+            var nearestTargets = new List<Vector2Int>(8);
+            var nearestDistance = int.MaxValue;
+            for (var y = 0; y < boardSize; y++)
+            {
+                for (var x = 0; x < boardSize; x++)
+                {
+                    var cell = new Vector2Int(x, y);
+                    if (!_model.IsOccupied(cell))
+                    {
+                        continue;
+                    }
+
+                    var distance = ChebyshevDistance(origin, cell);
+                    if (distance <= 0 || distance > 2)
+                    {
+                        continue;
+                    }
+
+                    if (distance < nearestDistance)
+                    {
+                        nearestTargets.Clear();
+                        nearestTargets.Add(cell);
+                        nearestDistance = distance;
+                        continue;
+                    }
+
+                    if (distance == nearestDistance)
+                    {
+                        nearestTargets.Add(cell);
+                    }
+                }
+            }
+
+            if (nearestTargets.Count <= 0)
+            {
+                return false;
+            }
+
+            if (nearestTargets.Count > 1 && TryGetOccupiedMassCenter(out var massCenter))
+            {
+                var filteredTargets = new List<Vector2Int>(nearestTargets.Count);
+                var bestMassDistance = float.MaxValue;
+                for (var i = 0; i < nearestTargets.Count; i++)
+                {
+                    var d = Mathf.Abs(nearestTargets[i].x - massCenter.x) + Mathf.Abs(nearestTargets[i].y - massCenter.y);
+                    if (d < bestMassDistance - 0.001f)
+                    {
+                        filteredTargets.Clear();
+                        filteredTargets.Add(nearestTargets[i]);
+                        bestMassDistance = d;
+                        continue;
+                    }
+
+                    if (Mathf.Abs(d - bestMassDistance) <= 0.001f)
+                    {
+                        filteredTargets.Add(nearestTargets[i]);
+                    }
+                }
+
+                if (filteredTargets.Count > 0)
+                {
+                    nearestTargets = filteredTargets;
+                }
+            }
+
+            var bestDistance = int.MaxValue;
+            var bestIsOccupied = false;
+            var bestCandidates = new List<Vector2Int>(8);
+            for (var i = 0; i < AdjacentDirections8.Length; i++)
+            {
+                var candidate = origin + AdjacentDirections8[i];
+                if (!CanUseBlockerTarget(candidate, null))
+                {
+                    continue;
+                }
+
+                var candidateDistance = int.MaxValue;
+                for (var t = 0; t < nearestTargets.Count; t++)
+                {
+                    var d = ChebyshevDistance(candidate, nearestTargets[t]);
+                    if (d < candidateDistance)
+                    {
+                        candidateDistance = d;
+                    }
+                }
+
+                var isOccupied = _model.IsOccupied(candidate);
+                if (bestCandidates.Count == 0 || candidateDistance < bestDistance)
+                {
+                    bestCandidates.Clear();
+                    bestCandidates.Add(candidate);
+                    bestDistance = candidateDistance;
+                    bestIsOccupied = isOccupied;
+                    continue;
+                }
+
+                if (candidateDistance == bestDistance)
+                {
+                    if (isOccupied && !bestIsOccupied)
+                    {
+                        bestCandidates.Clear();
+                        bestCandidates.Add(candidate);
+                        bestIsOccupied = true;
+                        continue;
+                    }
+
+                    if (isOccupied == bestIsOccupied)
+                    {
+                        bestCandidates.Add(candidate);
+                    }
+                }
+            }
+
+            if (bestCandidates.Count <= 0)
+            {
+                return false;
+            }
+
+            target = bestCandidates[UnityEngine.Random.Range(0, bestCandidates.Count)];
+            return true;
+        }
+
+        private bool TryGetAdjacentMoveTargetDefault(Vector2Int origin, out Vector2Int target)
         {
             target = default;
             if (_model == null)
@@ -730,6 +893,114 @@ namespace BlockAlbum.Grid
             }
 
             return TryPickRandom(emptyCandidates, out target);
+        }
+
+        private bool TryGetAdjacentMoveTargetToMassCenter(Vector2Int origin, out Vector2Int target)
+        {
+            target = default;
+            if (_model == null || !TryGetOccupiedMassCenter(out var massCenter))
+            {
+                return false;
+            }
+
+            var bestDistance = float.MaxValue;
+            var bestIsOccupied = false;
+            var bestCandidates = new List<Vector2Int>(8);
+            for (var i = 0; i < AdjacentDirections8.Length; i++)
+            {
+                var candidate = origin + AdjacentDirections8[i];
+                if (!CanUseBlockerTarget(candidate, null))
+                {
+                    continue;
+                }
+
+                var distance = Mathf.Abs(candidate.x - massCenter.x) + Mathf.Abs(candidate.y - massCenter.y);
+                var isOccupied = _model.IsOccupied(candidate);
+                if (bestCandidates.Count == 0 || distance < bestDistance - 0.001f)
+                {
+                    bestCandidates.Clear();
+                    bestCandidates.Add(candidate);
+                    bestDistance = distance;
+                    bestIsOccupied = isOccupied;
+                    continue;
+                }
+
+                if (Mathf.Abs(distance - bestDistance) <= 0.001f)
+                {
+                    if (isOccupied && !bestIsOccupied)
+                    {
+                        bestCandidates.Clear();
+                        bestCandidates.Add(candidate);
+                        bestIsOccupied = true;
+                        continue;
+                    }
+
+                    if (isOccupied == bestIsOccupied)
+                    {
+                        bestCandidates.Add(candidate);
+                    }
+                }
+            }
+
+            if (bestCandidates.Count <= 0)
+            {
+                return false;
+            }
+
+            target = bestCandidates[UnityEngine.Random.Range(0, bestCandidates.Count)];
+            return true;
+        }
+
+        private bool CanBlockerStepOntoFigureNow()
+        {
+            if (_model == null)
+            {
+                return false;
+            }
+
+            var maxOnFigures = Mathf.Max(0, maxBlockersOnFigureCells);
+            if (maxOnFigures <= 0)
+            {
+                return false;
+            }
+
+            return _model.CountBlockedOnOccupied() < maxOnFigures;
+        }
+
+        private bool TryGetOccupiedMassCenter(out Vector2 massCenter)
+        {
+            massCenter = Vector2.zero;
+            if (_model == null)
+            {
+                return false;
+            }
+
+            var sumX = 0f;
+            var sumY = 0f;
+            var count = 0;
+            for (var y = 0; y < boardSize; y++)
+            {
+                for (var x = 0; x < boardSize; x++)
+                {
+                    var cell = new Vector2Int(x, y);
+                    if (!_model.IsOccupied(cell))
+                    {
+                        continue;
+                    }
+
+                    sumX += x;
+                    sumY += y;
+                    count++;
+                }
+            }
+
+            if (count <= 0)
+            {
+                return false;
+            }
+
+            massCenter = new Vector2(sumX / count, sumY / count);
+            return true;
         }
 
         private void MarkDestroyedBlockers(ISet<Vector2Int> clearedCells)

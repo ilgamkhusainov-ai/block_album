@@ -18,6 +18,7 @@ namespace BlockAlbum.UI
         private Text _detailsText;
         private BoardView _boardView;
         private LevelGoalController _goalController;
+        private LevelProgressionController _levelProgressionController;
 
         private IEnumerator Start()
         {
@@ -25,6 +26,7 @@ namespace BlockAlbum.UI
             BuildIfNeeded();
             BindBoard();
             BindGoal();
+            BindLevelProgression();
             RefreshScore(_boardView != null ? _boardView.Score : 0);
             RefreshDetails(BuildIdleDetails());
         }
@@ -39,6 +41,10 @@ namespace BlockAlbum.UI
             if (_goalController != null)
             {
                 _goalController.GoalChanged -= OnGoalChanged;
+            }
+            if (_levelProgressionController != null)
+            {
+                _levelProgressionController.LevelChanged -= OnLevelChanged;
             }
         }
 
@@ -66,6 +72,18 @@ namespace BlockAlbum.UI
 
             _goalController.GoalChanged -= OnGoalChanged;
             _goalController.GoalChanged += OnGoalChanged;
+        }
+
+        private void BindLevelProgression()
+        {
+            _levelProgressionController = FindFirstObjectByType<LevelProgressionController>();
+            if (_levelProgressionController == null)
+            {
+                return;
+            }
+
+            _levelProgressionController.LevelChanged -= OnLevelChanged;
+            _levelProgressionController.LevelChanged += OnLevelChanged;
         }
 
         private void OnTurnResolved(BoardTurnResult result)
@@ -107,12 +125,22 @@ namespace BlockAlbum.UI
             {
                 details += $"  {_goalController.GetStatusLabel()}";
             }
+            if (_levelProgressionController != null)
+            {
+                details += $"  {_levelProgressionController.GetLevelLabel()}";
+                details += $"  {_levelProgressionController.GetVarietyLabel()}";
+            }
             details += $"  Breakdown:C{result.ScoreFromCells}/B{result.ScoreFromBlockers}/L{result.ScoreFromLines}/Z{result.ScoreFromZones}/K{result.ComboBonusScore}";
 
             RefreshDetails(details);
         }
 
         private void OnGoalChanged()
+        {
+            RefreshDetails(BuildIdleDetails());
+        }
+
+        private void OnLevelChanged()
         {
             RefreshDetails(BuildIdleDetails());
         }
@@ -202,7 +230,9 @@ namespace BlockAlbum.UI
             }
 
             var goalText = _goalController != null ? _goalController.GetStatusLabel() : "Goal: n/a";
-            return $"{goalText} | Power:{_boardView.PowerCharge}/{_boardView.PowerMax} | Blockers:{_boardView.TurnsUntilBlockerMove}";
+            var levelText = _levelProgressionController != null ? _levelProgressionController.GetLevelLabel() : "Level n/a";
+            var varietyText = _levelProgressionController != null ? _levelProgressionController.GetVarietyLabel() : "Variety n/a";
+            return $"{levelText} | {varietyText} | {goalText} | Power:{_boardView.PowerCharge}/{_boardView.PowerMax} | Blockers:{_boardView.TurnsUntilBlockerMove}";
         }
 
         private static Font GetDefaultFont()
