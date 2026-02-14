@@ -20,11 +20,14 @@ namespace BlockAlbum.UI
         [SerializeField] private Color textPanelHighlightColor = new Color(1f, 0.77f, 0.16f, 0.32f);
         [SerializeField] private Color miniCellColor = new Color(1f, 0.67f, 0.20f, 0.95f);
         [SerializeField] private Color miniCellHighlightColor = new Color(0.35f, 0.95f, 0.95f, 1f);
-        [SerializeField] private Color miniCellEmptyColor = new Color(1f, 1f, 1f, 0f);
-        [Header("Layout")]
+        [SerializeField] [Range(0.6f, 1f)] private float miniCellFillRatio = 0.86f;
+        [Header("Layout (Fixed iPhone 15 Pro Max)")]
         [SerializeField] private int cardColumns = 2;
-        [SerializeField] private float columnsMinScreenWidthRatio = 0.78f;
-        [SerializeField] private float cardsSpacing = 16f;
+        [SerializeField] private float targetScreenWidthPx = 1290f;
+        [SerializeField] private float fixedColumnsWidthPx = 1032f; // 80% of 1290
+        [SerializeField] private float fixedCardsSpacingPx = 24f;
+        [SerializeField] private float fixedFigureCardSizePx = 504f; // (1032 - 24) / 2
+        [SerializeField] private float fixedTextPanelHeightPx = 126f; // 25% of 504
 
         private LevelProgressionController _levelProgressionController;
         private RectTransform _overlayRoot;
@@ -37,7 +40,6 @@ namespace BlockAlbum.UI
         private float _lastShownTime = -100f;
         private float _figureCardSize = 220f;
         private float _cardItemHeight = 286f;
-        private float _previewSize = 176f;
         private float _textPanelHeight = 55f;
 
         private IEnumerator Start()
@@ -122,6 +124,11 @@ namespace BlockAlbum.UI
             }
 
             var highlightedBaseId = SelectHighlightedBase(entries);
+            Canvas.ForceUpdateCanvases();
+            if (_overlayRoot != null)
+            {
+                LayoutRebuilder.ForceRebuildLayoutImmediate(_overlayRoot);
+            }
             Render(level, currentTier, entries, highlightedBaseId);
 
             _overlayRoot.gameObject.SetActive(true);
@@ -299,90 +306,66 @@ namespace BlockAlbum.UI
 
         private void CreateCard(ShapeEntry entry, bool isHighlighted, bool isNewHighlight)
         {
-            var cardGo = new GameObject($"Shape_{entry.BaseId}", typeof(RectTransform), typeof(LayoutElement), typeof(VerticalLayoutGroup));
+            var cardGo = new GameObject($"Shape_{entry.BaseId}", typeof(RectTransform), typeof(LayoutElement));
             var cardRect = cardGo.GetComponent<RectTransform>();
             cardRect.SetParent(_cardsRoot, false);
 
             var cardLayout = cardGo.GetComponent<LayoutElement>();
             cardLayout.preferredWidth = _figureCardSize;
             cardLayout.preferredHeight = _cardItemHeight;
-
-            var vertical = cardGo.GetComponent<VerticalLayoutGroup>();
-            vertical.padding = new RectOffset(0, 0, 0, 0);
-            vertical.spacing = 8f;
-            vertical.childAlignment = TextAnchor.UpperCenter;
-            vertical.childControlWidth = true;
-            vertical.childControlHeight = false;
-            vertical.childForceExpandWidth = true;
-            vertical.childForceExpandHeight = false;
-
-            var figureCardGo = new GameObject("FigureCard", typeof(RectTransform), typeof(Image), typeof(LayoutElement));
+            
+            var figureCardGo = new GameObject("FigureCard", typeof(RectTransform), typeof(Image));
             var figureCardRect = figureCardGo.GetComponent<RectTransform>();
             figureCardRect.SetParent(cardRect, false);
+            figureCardRect.anchorMin = new Vector2(0f, 0f);
+            figureCardRect.anchorMax = new Vector2(1f, 1f);
+            figureCardRect.offsetMin = new Vector2(0f, _textPanelHeight);
+            figureCardRect.offsetMax = Vector2.zero;
 
             var figureCardImage = figureCardGo.GetComponent<Image>();
             figureCardImage.color = isHighlighted ? cardHighlightColor : cardColor;
             figureCardImage.raycastTarget = false;
 
-            var figureCardLayout = figureCardGo.GetComponent<LayoutElement>();
-            figureCardLayout.preferredHeight = _figureCardSize;
-
-            var previewGo = new GameObject("Preview", typeof(RectTransform), typeof(GridLayoutGroup));
+            var previewGo = new GameObject("Preview", typeof(RectTransform));
             var previewRect = previewGo.GetComponent<RectTransform>();
             previewRect.SetParent(figureCardRect, false);
             previewRect.anchorMin = new Vector2(0.5f, 0.5f);
             previewRect.anchorMax = new Vector2(0.5f, 0.5f);
             previewRect.pivot = new Vector2(0.5f, 0.5f);
-            previewRect.sizeDelta = new Vector2(_previewSize, _previewSize);
+            previewRect.sizeDelta = new Vector2(_figureCardSize, _figureCardSize);
+            PaintShape(previewRect, entry.Shape, isHighlighted);
 
-            var grid = previewGo.GetComponent<GridLayoutGroup>();
-            grid.constraint = GridLayoutGroup.Constraint.FixedColumnCount;
-            grid.constraintCount = previewGridSize;
-            grid.spacing = Vector2.zero;
-            grid.childAlignment = TextAnchor.UpperLeft;
-            grid.startCorner = GridLayoutGroup.Corner.UpperLeft;
-            grid.startAxis = GridLayoutGroup.Axis.Horizontal;
-
-            var cellSize = Mathf.Floor(_previewSize / previewGridSize);
-            grid.cellSize = new Vector2(cellSize, cellSize);
-
-            var miniCells = new List<Image>(previewGridSize * previewGridSize);
-            for (var i = 0; i < previewGridSize * previewGridSize; i++)
-            {
-                var miniGo = new GameObject($"Mini_{i:00}", typeof(RectTransform), typeof(Image));
-                miniGo.transform.SetParent(previewRect, false);
-                var image = miniGo.GetComponent<Image>();
-                image.color = miniCellEmptyColor;
-                image.raycastTarget = false;
-                miniCells.Add(image);
-            }
-
-            PaintShape(miniCells, entry.Shape, isHighlighted);
-
-            var textPanelGo = new GameObject("TextPanel", typeof(RectTransform), typeof(Image), typeof(LayoutElement));
+            var textPanelGo = new GameObject("TextPanel", typeof(RectTransform), typeof(Image));
             var textPanelRect = textPanelGo.GetComponent<RectTransform>();
             textPanelRect.SetParent(cardRect, false);
+            textPanelRect.anchorMin = new Vector2(0f, 0f);
+            textPanelRect.anchorMax = new Vector2(1f, 0f);
+            textPanelRect.pivot = new Vector2(0.5f, 0f);
+            textPanelRect.sizeDelta = new Vector2(0f, _textPanelHeight);
+            textPanelRect.anchoredPosition = Vector2.zero;
 
             var textPanelImage = textPanelGo.GetComponent<Image>();
             textPanelImage.color = isHighlighted ? textPanelHighlightColor : textPanelColor;
             textPanelImage.raycastTarget = false;
-
-            var textPanelLayout = textPanelGo.GetComponent<LayoutElement>();
-            textPanelLayout.preferredHeight = _textPanelHeight;
 
             var labelGo = new GameObject("Label", typeof(RectTransform), typeof(Text));
             var labelRect = labelGo.GetComponent<RectTransform>();
             labelRect.SetParent(textPanelRect, false);
             labelRect.anchorMin = Vector2.zero;
             labelRect.anchorMax = Vector2.one;
-            labelRect.offsetMin = new Vector2(8f, 6f);
-            labelRect.offsetMax = new Vector2(-8f, -6f);
+            labelRect.offsetMin = Vector2.zero;
+            labelRect.offsetMax = Vector2.zero;
 
             var label = labelGo.GetComponent<Text>();
             label.font = GetDefaultFont();
-            label.fontSize = 24;
-            label.alignment = TextAnchor.UpperCenter;
-            label.horizontalOverflow = HorizontalWrapMode.Wrap;
+            var maxFontSize = Mathf.Max(1, Mathf.RoundToInt(_textPanelHeight * 0.42f));
+            var minFontSize = Mathf.Max(1, Mathf.RoundToInt(_textPanelHeight * 0.20f));
+            label.fontSize = maxFontSize;
+            label.resizeTextForBestFit = true;
+            label.resizeTextMaxSize = maxFontSize;
+            label.resizeTextMinSize = Mathf.Min(minFontSize, maxFontSize);
+            label.alignment = TextAnchor.MiddleCenter;
+            label.horizontalOverflow = HorizontalWrapMode.Overflow;
             label.verticalOverflow = VerticalWrapMode.Overflow;
             label.color = Color.white;
             label.raycastTarget = false;
@@ -391,9 +374,9 @@ namespace BlockAlbum.UI
                 : $"{entry.BaseId.ToUpperInvariant()}";
         }
 
-        private void PaintShape(List<Image> miniCells, PieceShapeDefinition shape, bool isHighlighted)
+        private void PaintShape(RectTransform previewRect, PieceShapeDefinition shape, bool isHighlighted)
         {
-            if (miniCells == null || shape == null || shape.Cells == null)
+            if (previewRect == null || shape == null || shape.Cells == null || shape.Cells.Length == 0)
             {
                 return;
             }
@@ -411,25 +394,39 @@ namespace BlockAlbum.UI
                 if (c.y > maxY) maxY = c.y;
             }
 
-            var width = maxX - minX + 1;
-            var height = maxY - minY + 1;
-            var offsetX = (previewGridSize - width) / 2;
-            var offsetY = (previewGridSize - height) / 2;
+            var widthCells = maxX - minX + 1;
+            var heightCells = maxY - minY + 1;
+            var maxSide = Mathf.Min(previewRect.rect.width, previewRect.rect.height) * 0.8f;
+            var cellSize = Mathf.Floor(maxSide / Mathf.Max(1, previewGridSize));
+            if (cellSize < 2f)
+            {
+                cellSize = 2f;
+            }
+
+            var shapeWidth = widthCells * cellSize;
+            var shapeHeight = heightCells * cellSize;
+            var startX = -shapeWidth * 0.5f + cellSize * 0.5f;
+            var startY = -shapeHeight * 0.5f + cellSize * 0.5f;
             var color = isHighlighted ? miniCellHighlightColor : miniCellColor;
+            var visualCellSize = Mathf.Max(1f, Mathf.Floor(cellSize * Mathf.Clamp(miniCellFillRatio, 0.6f, 1f)));
 
             for (var i = 0; i < shape.Cells.Length; i++)
             {
                 var c = shape.Cells[i];
-                var x = c.x - minX + offsetX;
-                var y = c.y - minY + offsetY;
-                var row = previewGridSize - 1 - y;
-                var index = row * previewGridSize + x;
-                if (index < 0 || index >= miniCells.Count)
-                {
-                    continue;
-                }
+                var localX = c.x - minX;
+                var localY = c.y - minY;
+                var cellGo = new GameObject($"Mini_{i:00}", typeof(RectTransform), typeof(Image));
+                var cellRect = cellGo.GetComponent<RectTransform>();
+                cellRect.SetParent(previewRect, false);
+                cellRect.anchorMin = new Vector2(0.5f, 0.5f);
+                cellRect.anchorMax = new Vector2(0.5f, 0.5f);
+                cellRect.pivot = new Vector2(0.5f, 0.5f);
+                cellRect.sizeDelta = new Vector2(visualCellSize, visualCellSize);
+                cellRect.anchoredPosition = new Vector2(startX + localX * cellSize, startY + localY * cellSize);
 
-                miniCells[index].color = color;
+                var image = cellGo.GetComponent<Image>();
+                image.color = color;
+                image.raycastTarget = false;
             }
         }
 
@@ -461,8 +458,8 @@ namespace BlockAlbum.UI
                 panel.SetParent(overlay, false);
             }
 
-            panel.anchorMin = new Vector2(0.05f, 0.08f);
-            panel.anchorMax = new Vector2(0.95f, 0.92f);
+            panel.anchorMin = new Vector2(0.02f, 0.06f);
+            panel.anchorMax = new Vector2(0.98f, 0.94f);
             panel.offsetMin = Vector2.zero;
             panel.offsetMax = Vector2.zero;
 
@@ -471,7 +468,7 @@ namespace BlockAlbum.UI
             panelImage.raycastTarget = true;
 
             var panelLayout = panel.GetComponent<VerticalLayoutGroup>();
-            panelLayout.padding = new RectOffset(20, 20, 20, 20);
+            panelLayout.padding = new RectOffset(12, 12, 12, 12);
             panelLayout.spacing = 12f;
             panelLayout.childAlignment = TextAnchor.UpperCenter;
             panelLayout.childControlHeight = false;
@@ -497,7 +494,7 @@ namespace BlockAlbum.UI
             var grid = cards.GetComponent<GridLayoutGroup>();
             grid.constraint = GridLayoutGroup.Constraint.FixedColumnCount;
             grid.constraintCount = Mathf.Max(1, cardColumns);
-            grid.spacing = new Vector2(cardsSpacing, cardsSpacing);
+            grid.spacing = new Vector2(fixedCardsSpacingPx, fixedCardsSpacingPx);
             grid.childAlignment = TextAnchor.UpperCenter;
             grid.startCorner = GridLayoutGroup.Corner.UpperLeft;
             grid.startAxis = GridLayoutGroup.Axis.Horizontal;
@@ -520,24 +517,27 @@ namespace BlockAlbum.UI
                 return;
             }
 
+            _cardsGrid.constraintCount = Mathf.Max(1, cardColumns);
+            _cardsGrid.spacing = new Vector2(Mathf.Max(0f, fixedCardsSpacingPx), Mathf.Max(0f, fixedCardsSpacingPx));
+
             var columns = Mathf.Max(1, cardColumns);
-            var spacing = Mathf.Max(0f, _cardsGrid.spacing.x);
-            var screenWidth = _overlayRoot.rect.width;
-            var cardsAreaWidth = _cardsRoot.rect.width;
-            if (screenWidth <= 1f || cardsAreaWidth <= 1f)
+            var figureCardWidth = Mathf.Max(1f, fixedFigureCardSizePx);
+            var figureCardHeight = figureCardWidth;
+
+            // Keep the total columns span pinned to iPhone 15 Pro Max target width.
+            var requiredColumnsWidth = figureCardWidth * columns + _cardsGrid.spacing.x * (columns - 1);
+            var cardsLayout = _cardsRoot.GetComponent<LayoutElement>();
+            if (cardsLayout != null)
             {
-                return;
+                var derivedColumnsWidthFromTarget = Mathf.Floor(Mathf.Max(1f, targetScreenWidthPx) * 0.8f);
+                var pinnedWidth = Mathf.Max(Mathf.Max(fixedColumnsWidthPx, derivedColumnsWidthFromTarget), requiredColumnsWidth);
+                cardsLayout.preferredWidth = pinnedWidth;
+                cardsLayout.minWidth = pinnedWidth;
             }
 
-            var targetColumnsWidth = Mathf.Max(screenWidth * Mathf.Clamp01(columnsMinScreenWidthRatio), screenWidth * 0.75f);
-            var columnsWidth = Mathf.Min(cardsAreaWidth, targetColumnsWidth);
-            var widthPerCard = Mathf.Floor((columnsWidth - spacing * (columns - 1)) / columns);
-            widthPerCard = Mathf.Max(150f, widthPerCard);
-
-            _figureCardSize = widthPerCard;
-            _previewSize = Mathf.Floor(_figureCardSize * 0.8f);
-            _textPanelHeight = Mathf.Max(42f, Mathf.Floor(_figureCardSize * 0.25f));
-            _cardItemHeight = _figureCardSize + _textPanelHeight + 8f;
+            _figureCardSize = figureCardWidth;
+            _textPanelHeight = Mathf.Max(1f, fixedTextPanelHeightPx);
+            _cardItemHeight = figureCardHeight + _textPanelHeight;
             _cardsGrid.cellSize = new Vector2(_figureCardSize, _cardItemHeight);
         }
 
